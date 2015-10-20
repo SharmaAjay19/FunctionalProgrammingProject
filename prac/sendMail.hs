@@ -4,7 +4,9 @@ import qualified Data.Text.Lazy as T (pack)
 import Network.Mail.Mime hiding (simpleMail)
 import Data.ByteString.Lazy hiding (pack,putStrLn)
 myPacker = T.pack
+
 makeMail sndrName sndrAddr rcptName rcptAddr subject msg attach = simpleMail (Address (Just (pack sndrName)) (pack sndrAddr)) [(Address (Just (pack rcptName)) (pack rcptAddr))] [] [] (pack subject) [(plainTextPart (myPacker msg)), attach]
+
 main =  do
 	putStrLn "Enter Sender's Name:"
 	sndrName <- getLine
