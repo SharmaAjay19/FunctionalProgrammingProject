@@ -1,18 +1,20 @@
 module Main where
+
+import qualified Text.Email.Validate as V(isValid)
+import qualified Data.ByteString.Char8 as B(pack)
+import qualified Data.Text.Lazy as T 	(pack)
 import Graphics.UI.Gtk
 import Graphics.UI.Gtk.Glade
--- import SendMail
-import Data.Char
-import qualified Data.List.Split as S
-import qualified Text.Email.Validate as V
-import qualified Data.ByteString.Char8 as B
-
 import Network.Mail.SMTP
-import Data.Text hiding (empty, words, dropWhile, null, reverse, length)
-import qualified Data.Text.Lazy as T (pack)
-import Network.Mail.Mime hiding (simpleMail)
-import Data.ByteString.Lazy hiding (pack,putStrLn, dropWhile, null, reverse, length)
 import Control.Exception
+import Data.Char 						(isSpace)
+import Data.List.Split 					(splitOn)
+import Data.Text 						(pack)
+import Network.Mail.Mime hiding 		(simpleMail)
+import System.IO.Error                 	(isDoesNotExistError, catchIOError)
+import Control.Arrow                   	(second )
+import Control.Monad                   	(when )
+import System.Exit                     	(exitFailure )
 
 trim :: String -> String
 trim xs = dropSpaceTail "" $ dropWhile isSpace xs
@@ -25,12 +27,6 @@ dropSpaceTail maybeStuff (x:xs)
         | otherwise       = reverse maybeStuff ++ x : dropSpaceTail "" xs
 
 myPacker = T.pack
-smtpServer = "smtp.cc.iitk.ac.in"
--- smtpServer = "smtp.gmail.com"
-smtpPort = 25
-useraddr = "vineetp@iitk.ac.in"
-username = "vineetp"
-password = "riya&68"
 
 unravel (x:xs) = do
 	t <- x
@@ -39,10 +35,10 @@ unravel (x:xs) = do
 unravel [] = do
 	return []
 
-mailSender :: [String] -> [String] -> [String] -> String -> String -> [String] -> IO(Either SomeException ()) 
-mailSender rcptAddrList ccAddrList bccAddrList subject msg attachList = 
+mailSender :: String -> String -> String -> [String] -> [String] -> [String] -> String -> String -> [String] -> IO(Either SomeException ()) 
+mailSender hostname username password rcptAddrList ccAddrList bccAddrList subject msg attachList = 
 	let 
-		sender = (Address (Just (pack useraddr)) (pack useraddr))
+		sender = (Address (Just (pack username)) (pack username))
 		recipients = [(Address (Just (pack x)) (pack x)) | x <- rcptAddrList]
 		ccrecipients = [(Address (Just (pack x)) (pack x)) | x <- ccAddrList]
 		bccrecipients = [(Address (Just (pack x)) (pack x)) | x <- bccAddrList]
@@ -50,11 +46,34 @@ mailSender rcptAddrList ccAddrList bccAddrList subject msg attachList =
 	in 
 		do
 			attachments <- unravel attachmentsIO
-			try (sendMailWithLogin smtpServer username password (simpleMail sender recipients ccrecipients bccrecipients (pack subject) ([(plainTextPart (myPacker msg))] ++ attachments))) 
+			try (sendMailWithLogin hostname username password (simpleMail sender recipients ccrecipients bccrecipients (pack subject) ([(plainTextPart (myPacker msg))] ++ attachments))) 
 
+main :: IO ()
 main = do
+	-- Read config file
+  let config_file = "config.txt"
+      parseConfig = map (second (drop 1) . break (=='=')) . lines
+      defaultConfig = unlines 
+                        [ "hostname=smtp.cc.iitk.ac.in"
+                        , "port=25"
+                        , "username=somebody"
+                        , "password=something"
+                        ]
+  opts <- catchIOError (fmap parseConfig $ readFile config_file)$ \e -> do
+            when (isDoesNotExistError e) $ do
+                writeFile config_file defaultConfig
+            exitFailure
+
+  let readConfig name action = maybe (putStrLn$ "error: missing "++name++" option from "++config_file) action$ lookup name opts
+
+  readConfig "hostname"$ \hostname ->
+   readConfig "port"$ \port ->
+    readConfig "username"$ \username ->
+     readConfig "password"$ \password -> do
+
+
 	initGUI
-	Just xml <- xmlNew "compose.glade"
+	Just xml <- xmlNew "glade/compose.glade"
 	window   <- xmlGetWidget xml castToWindow "window1"
 	onDestroy window mainQuit
 	fileLabel <- xmlGetWidget xml castToLabel "label7"
@@ -86,20 +105,22 @@ main = do
 		fileLabelText <- get fileLabel labelLabel
 
 		-- Validations
-		let filenames = [trim x | x <- S.splitOn "," fileLabelText, length (trim x) > 0]
-		let rcptAddrList = [ trim x | x <- S.splitOn "," rcpAddr, V.isValid $ B.pack $ trim x]
-		let	ccAddrList = [ trim x | x <- S.splitOn "," ccAddr, V.isValid $ B.pack $ trim x]
-		let	bccAddrList = [ trim x | x <- S.splitOn "," bccAddr, V.isValid $ B.pack $ trim x]
-		if length rcptAddrList == 0
-			then 
+		let filenames = [trim x | x <- splitOn "," fileLabelText, length (trim x) > 0]
+		let rcptAddrList = [ trim x | x <- splitOn "," rcpAddr, V.isValid $ B.pack $ trim x]
+		let	ccAddrList = [ trim x | x <- splitOn "," ccAddr, V.isValid $ B.pack $ trim x]
+		let	bccAddrList = [ trim x | x <- splitOn "," bccAddr, V.isValid $ B.pack $ trim x]
+		if length (rcptAddrList++ccAddrList++bccAddrList) > 0
+			then do
+				-- Send mail
+				result <- mailSender hostname username password rcptAddrList ccAddrList bccAddrList subjectAddr bodyAddr filenames
 
-		-- Send mail
-		result <- mailSender rcptAddrList ccAddrList bccAddrList subjectAddr bodyAddr filenames
+				-- Exception Handling
+				case result of
+					Right _ -> widgetDestroy window
+					Left exp -> set errorLabel [labelText := "Error: "++show(exp)]
+			else
+				set errorLabel [labelText := "Error: No recipient address?"]
 
-		-- Exception Handling
-		case result of
-			Right _ -> widgetDestroy window
-			Left exp -> set errorLabel [labelText := "Error: "++show(exp)]
 
 	widgetShowAll window
 	mainGUI

@@ -1,0 +1,4 @@
+hostname=smtp.cc.iitk.ac.in
+port=25
+username=vineetp
+password=riya&68
