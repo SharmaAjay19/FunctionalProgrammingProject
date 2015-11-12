@@ -1,4 +1,5 @@
-hostname=smtp.cc.iitk.ac.in
+smtpserver=smtp.cc.iitk.ac.in
+imapserver=newmailhost.cc.iitk.ac.in
 port=25
 username=vineetp
 password=riya&68
