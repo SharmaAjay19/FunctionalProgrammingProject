@@ -19,32 +19,32 @@ import Control.Arrow                   	(second )
 import Control.Monad                   	(when )
 import System.Exit                     	(exitFailure )
 import qualified ComposeWindow as C 	(main)
--- import Codec.MIME.Parse
+import Codec.MIME.Parse
 import Codec.MIME.Utils
--- import Codec.MIME.Type
+import Codec.MIME.Type
+import Data.Maybe
 import qualified Data.ByteString as B
-import qualified Data.Text as TT 		(concat)
-import Network.HaskellNet.IMAP.Connection (IMAPConnection )
--- import Network.HaskellNet.SSL (Settings (..))
--- import Network.HaskellNet.IMAP.SSL ( connectIMAPSSLWithSettings
---                                    , defaultSettingsIMAPSSL
---                                    )
-import Codec.MIME.Type  (MIMEValue (..), MIMEParam (..))
-import Codec.MIME.Parse (parseMIMEMessage)
+
+
+
 
 -- addMailbox :: String -> String -> String -> IO ()
-addMailbox emailList uid = do -- sender subject time = do
+addMailbox emailList mailHeader = do
+	let paramMime = mime_val_headers $ parseMIMEMessage $ decode mailHeader
+	let	subject = fromJust $ getParam "subject" paramMime
+	let	sender = fromJust $ getParam "from" paramMime
+	let	time = fromJust $ getParam "date" paramMime
+
 	hbox <- hBoxNew True 0
-	-- -- sender
-	print uid
-	senderlabel <- labelNew (Just (show uid))
+	-- sender
+	senderlabel <- labelNew (Just (show sender))
 	containerAdd hbox senderlabel
-	-- -- subject
-	-- subjectlabel <- labelNew (Just (show subject))
-	-- containerAdd hbox subjectlabel
-	-- -- time
-	-- timelabel <- labelNew (Just (show time))
-	-- containerAdd hbox timelabel
+	-- subject
+	subjectlabel <- labelNew (Just (show subject))
+	containerAdd hbox subjectlabel
+	-- time
+	timelabel <- labelNew (Just (show time))
+	containerAdd hbox timelabel
 	-- add container to email list
 	containerAdd emailList hbox
 
@@ -59,36 +59,11 @@ unravel func (x:xs) = do
 unravel _ [] = do
 	return []
 
--- fetchMessage :: IMAPConnection -> Word64 -> IO Text
-fetchMessage conn uid = do
-  content <- fetch conn uid
-  return $ decodeUtf8 content
-
-getMessageID :: IO Text -> IO Text
-getMessageID raw = do
-  content <- raw
-  return $ pluckMessageID (parseMIMEMessage content)
-
-pluckMessageID :: MIMEValue -> Text
-pluckMessageID = pluckHeaderValue messageIDHeader
-
-messageIDHeader :: Text
-messageIDHeader = "message-id"
-
-pluckHeaderValue :: Text -> MIMEValue -> Text
-pluckHeaderValue headerName mime_val_headers =
-  valueOrDefault $ find headerMatch mime_val_headers
-  where
-    headerMatch :: MIMEParam -> Bool
-    headerMatch (MIMEParam headerName' _) = headerName' == headerName
-
-    valueOrDefault :: Maybe MIMEParam -> Text
-    valueOrDefault Nothing = TT.concat ["No ", headerName]
-    valueOrDefault (Just (MIMEParam _ value)) = value
-
-putMessageID :: IO Text -> IO ()
-putMessageID msgID = msgID >>= TIO.putStrLn
--- parseMailHeaders (mail:mails) = parseHeaders.decode 
+getParam :: String -> [MIMEParam] -> Maybe Text
+getParam attrName (paramMime:paramlist) 
+	| (paramName paramMime) == (pack attrName) = Just (paramValue paramMime)
+	| otherwise 				= getParam attrName paramlist
+getParam attrName [] = Nothing
 
 main = do
 	-- Read config file
@@ -140,12 +115,13 @@ main = do
 	onClicked fetchButton $ do
 		select con "INBOX"
 		msgs <- search con [ALLs]
-		mails <- mapM_ (putMessageID . getMessageID . fetchMessage con) (take 1 msgs)
+		mails <- unravel (fetchHeader con) (take 10 msgs)
 		
-		print $ head mails
-		-- print $ findMultipartNamed (pack "received") $ parseMIMEMessage $ decode $ head mails
-		-- mapM_ (addMailbox emailList) (take 10 msgs)
-		-- widgetShowAll emailList
+		-- print $ head mails 
+
+		-- print $ getParam "subject" $ mime_val_headers $ parseMIMEMessage $ decode $ head mails
+		mapM_ (addMailbox emailList) mails
+		widgetShowAll emailList
 
 	widgetShowAll window
 	mainGUI
