@@ -26,6 +26,4 @@ main = do
 		"2" -> search con [(TOs searchTerm)]
 		"3" -> search con [(SUBJECTs searchTerm)]
 		"4" -> search con [(BODYs searchTerm)]
-	--mapM_ print (take 10 (reverse msgs))
-	--forM_ (take 4 msgs) (fetch con >=> print)
 	forM_ msgs (fetch con >=> print)
