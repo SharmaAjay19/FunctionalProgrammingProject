@@ -43,7 +43,8 @@ addMailbox emailList emailBody con (mailIndex, mailHeader) = do
 	let clickEvent = do
 		mail <- fetch con (read mailIndex :: Word64)
 		textBuffer <- textViewGetBuffer emailBody
-		textBufferSetText textBuffer (show mail)
+		-- let Single mailBody = mime_val_content $ parseMIMEMessage $ decode mail
+		textBufferSetText textBuffer (show $ mime_val_content $ parseMIMEMessage $ decode mail)
 		textViewSetEditable emailBody False	
 		textViewSetWrapMode emailBody WrapWord
 		textViewSetBuffer emailBody textBuffer

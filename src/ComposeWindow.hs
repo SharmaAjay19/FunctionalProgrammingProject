@@ -101,8 +101,12 @@ main = do
 		ccAddr <- get ccAddrEntry entryText
 		bccAddr <- get bccAddrEntry entryText
 		subjectAddr <- get subjectAddrEntry entryText
-		bodyAddr <- get bodyAddrEntry textViewImModule
+		bodyBuffer <- textViewGetBuffer bodyAddrEntry
 		fileLabelText <- get fileLabel labelLabel
+
+		startItr <- textBufferGetStartIter bodyBuffer
+		endItr <- textBufferGetEndIter bodyBuffer
+		bodyAddr <- textBufferGetText bodyBuffer startItr endItr True 
 
 		-- Validations
 		let filenames = [trim x | x <- splitOn "," fileLabelText, length (trim x) > 0]
