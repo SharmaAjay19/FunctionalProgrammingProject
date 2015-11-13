@@ -11,7 +11,7 @@ import Control.Exception
 import Data.Char 						(isSpace)
 import Data.List 	 					(find)
 import Data.List.Split 					(splitOn)
-import Data.Text 						(Text, pack)
+import Data.Text 						(Text, pack, unpack)
 import qualified  Data.Text.IO as TIO	(putStrLn)
 import Data.Text.Encoding				(decodeUtf8, encodeUtf8)
 import Network.Mail.Mime hiding 		(simpleMail)
@@ -26,9 +26,15 @@ import Codec.MIME.Utils
 import Codec.MIME.Type
 import Data.Maybe
 import qualified Data.ByteString as B
+import qualified Codec.MIME.Type as M 	(MIMEType( .. ))
 
+-- show $ mime_val_type $ head mimevalue -- fromJust $ getParam "charset" $ mimeParams $ head $ mime_val_type mimevalue
 
-
+-- selectMime
+selectMime (m:mimevalues) 
+	| (showMIMEType $ mimeType $ mime_val_type m) == (showMIMEType $ (M.Text (pack "plain"))) = Just (mimeParams $ mime_val_type m)
+	| otherwise = selectMime mimevalues
+selectMime [] = Nothing
 
 -- addMailbox :: String -> String -> String -> IO ()
 addMailbox emailList emailBody con (mailIndex, mailHeader) = do
@@ -43,25 +49,20 @@ addMailbox emailList emailBody con (mailIndex, mailHeader) = do
 	let clickEvent = do
 		mail <- fetch con (read mailIndex :: Word64)
 		textBuffer <- textViewGetBuffer emailBody
-		-- let Single mailBody = mime_val_content $ parseMIMEMessage $ decode mail
-		textBufferSetText textBuffer (show $ mime_val_content $ parseMIMEMessage $ decode mail)
+		let mailBody parsedMail = case mime_val_content $ parsedMail of 
+			Single msg -> unpack $ msg
+			Multi mimevalue -> mailBody (head mimevalue) -- show $ fromJust $ selectMime mimevalue
+
+		textBufferSetText textBuffer (mailBody (parseMIMEMessage $ decode mail))
 		textViewSetEditable emailBody False	
 		textViewSetWrapMode emailBody WrapWord
 		textViewSetBuffer emailBody textBuffer
 
-	-- sender
-	senderbutton <- buttonNewWithLabel ((show sender) ++ "|" ++ (show subject) ++ "|" ++ (show time))
+	-- sender subject and time
+	senderbutton <- buttonNewWithLabel ((unpack sender) ++ "|" ++ (unpack subject) ++ "|" ++ (unpack time))
 	onClicked senderbutton clickEvent
 	containerAdd hbox senderbutton
-	-- subject
-	-- subjectbutton <- buttonNewWithLabel (show subject)
-	-- onClicked subjectbutton clickEvent
-	-- containerAdd hbox subjectbutton
-	-- -- time
-	-- timebutton <- buttonNewWithLabel (show time)
-	-- onClicked timebutton clickEvent
-	-- containerAdd hbox timebutton
-	-- add container to email list
+
 	containerAdd emailList hbox
 
 decode :: B.ByteString -> Text
