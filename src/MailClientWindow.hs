@@ -28,8 +28,6 @@ import Data.Maybe
 import qualified Data.ByteString as B
 import qualified Codec.MIME.Type as M 	(MIMEType( .. ))
 
--- show $ mime_val_type $ head mimevalue -- fromJust $ getParam "charset" $ mimeParams $ head $ mime_val_type mimevalue
-
 -- selectMime
 selectMime (m:mimevalues) 
 	| (showMIMEType $ mimeType $ mime_val_type m) == (showMIMEType $ (M.Text (pack "plain"))) = Just (mimeParams $ mime_val_type m)
@@ -133,7 +131,7 @@ main = do
 	onClicked fetchButton $ do
 		select con "INBOX"
 		msgs <- search con [ALLs]
-		mails <- unravel (fetchHeader con) (take 10 msgs)
+		mails <- unravel (fetchHeader con) (take 15 $ reverse msgs)
 		
 		-- print $ head mails
 		mapM_ (addMailbox emailList emailBody con) mails
