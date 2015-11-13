@@ -28,13 +28,7 @@ import Data.Maybe
 import qualified Data.ByteString as B
 import qualified Codec.MIME.Type as M 	(MIMEType( .. ))
 
--- selectMime
-selectMime (m:mimevalues) 
-	| (showMIMEType $ mimeType $ mime_val_type m) == (showMIMEType $ (M.Text (pack "plain"))) = Just (mimeParams $ mime_val_type m)
-	| otherwise = selectMime mimevalues
-selectMime [] = Nothing
-
--- addMailbox :: String -> String -> String -> IO ()
+-- addMailbox :: VBox -> TextView -> IMAPConnection -> (String, B.ByteString) -> IO ()
 addMailbox emailList emailBody con (mailIndex, mailHeader) = do
 	let paramMime = mime_val_headers $ parseMIMEMessage $ decode mailHeader
 	let	subject = fromJust $ getParam "subject" paramMime
@@ -42,14 +36,13 @@ addMailbox emailList emailBody con (mailIndex, mailHeader) = do
 	let	time = fromJust $ getParam "date" paramMime
 
 	hbox <- hBoxNew True 0
-	widgetSetName hbox mailIndex
 	
 	let clickEvent = do
 		mail <- fetch con (read mailIndex :: Word64)
 		textBuffer <- textViewGetBuffer emailBody
 		let mailBody parsedMail = case mime_val_content $ parsedMail of 
 			Single msg -> unpack $ msg
-			Multi mimevalue -> mailBody (head mimevalue) -- show $ fromJust $ selectMime mimevalue
+			Multi mimevalue -> mailBody (head mimevalue)
 
 		textBufferSetText textBuffer (mailBody (parseMIMEMessage $ decode mail))
 		textViewSetEditable emailBody False	
@@ -57,7 +50,7 @@ addMailbox emailList emailBody con (mailIndex, mailHeader) = do
 		textViewSetBuffer emailBody textBuffer
 
 	-- sender subject and time
-	senderbutton <- buttonNewWithLabel ((unpack sender) ++ "|" ++ (unpack subject) ++ "|" ++ (unpack time))
+	senderbutton <- buttonNewWithLabel ((unpack subject) ++ "|" ++ (unpack sender) ++ "|" ++ (unpack time))
 	onClicked senderbutton clickEvent
 	containerAdd hbox senderbutton
 
@@ -76,8 +69,8 @@ unravel _ [] = do
 
 getParam :: String -> [MIMEParam] -> Maybe Text
 getParam attrName (paramMime:paramlist) 
-	| (paramName paramMime) == (pack attrName) = Just (paramValue paramMime)
-	| otherwise 				= getParam attrName paramlist
+	| (paramName paramMime) == (pack attrName) 	= Just (paramValue paramMime)
+	| otherwise 								= getParam attrName paramlist
 getParam attrName [] = Nothing
 
 main = do
@@ -114,6 +107,7 @@ main = do
 	fetchButton <- xmlGetWidget xml castToButton "button2"
 	emailList <- xmlGetWidget xml castToVBox "vbox2"
 	emailBody <- xmlGetWidget xml castToTextView "textview2"
+	hbuttontray <- xmlGetWidget xml castToHButtonBox "hbuttonbox1"
 	onClicked composeButton C.main
 	let 
 		printStatus message = set statusLabel [labelText := message]
@@ -124,18 +118,23 @@ main = do
 	loginResult <- try (login con username password) :: IO (Either SomeException  ())
 
 	case loginResult of
-		Left excp -> printStatus "Problems encountered while logging in."
+		Left excp -> do 
+			widgetDestroy hbuttontray
+			printStatus "Problems encountered while logging in."
 		Right () -> printStatus "Login successful."
 	
 
 	onClicked fetchButton $ do
+		printStatus "Fetching recent mails..."
 		select con "INBOX"
 		msgs <- search con [ALLs]
 		mails <- unravel (fetchHeader con) (take 15 $ reverse msgs)
 		
 		-- print $ head mails
+		containerForall emailList (containerRemove emailList)
 		mapM_ (addMailbox emailList emailBody con) mails
 		widgetShowAll emailList
+		printStatus "Done"
 
 	widgetShowAll window
 	mainGUI
